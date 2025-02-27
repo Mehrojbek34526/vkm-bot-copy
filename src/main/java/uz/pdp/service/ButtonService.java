@@ -1,6 +1,7 @@
 package uz.pdp.service;
 
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import uz.pdp.model.Music;
 import uz.pdp.utils.BotConstants;
@@ -81,7 +82,26 @@ public class ButtonService {
 
         row.add(deleteBtn);
 
+        return inlineKeyboardMarkup;
+    }
 
+    public ReplyKeyboard home() {
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+
+        InlineKeyboardButton searchButton = new InlineKeyboardButton();
+        searchButton.setText("Tezkor qidiruv");
+        searchButton.setSwitchInlineQueryCurrentChat("");
+
+        row.add(searchButton);
+
+        rows.add(row);
+
+        inlineKeyboardMarkup.setKeyboard(rows);
 
         return inlineKeyboardMarkup;
     }

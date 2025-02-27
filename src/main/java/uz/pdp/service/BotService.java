@@ -2,13 +2,14 @@ package uz.pdp.service;
 
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.AnswerInlineQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendAudio;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
-import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
-import org.telegram.telegrambots.meta.api.objects.InputFile;
-import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.*;
+import org.telegram.telegrambots.meta.api.objects.inlinequery.InlineQuery;
+import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResult;
+import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultAudio;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -18,10 +19,7 @@ import uz.pdp.utils.BotConstants;
 import uz.pdp.utils.TimeFormatter;
 
 import java.io.File;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  Created by: Mehrojbek
@@ -62,8 +60,99 @@ public class BotService extends TelegramLongPollingBot {
 
             processCallBack(update.getCallbackQuery());
 
+        } else if (update.hasInlineQuery()) {
+
+            processInlineQuery(update.getInlineQuery());
+
+        } else if (update.hasChannelPost()) {
+
+            processChannelPost(update.getChannelPost());
+
         }
 
+    }
+
+    private void processChannelPost(Message channelPost) {
+
+        if (!channelPost.hasAudio()) {
+            return;
+        }
+
+        Audio audio = channelPost.getAudio();
+        String title = audio.getTitle();
+        String artist = audio.getPerformer();
+        Integer duration = audio.getDuration();
+        String fileName = audio.getFileName();
+
+        Integer messageId = channelPost.getMessageId();
+
+        String userName = channelPost.getChat().getUserName();
+
+        //https://t.me/{channelUsername}/{messageId}
+
+        String href = "https://t.me/%s/%s".formatted(userName, messageId);
+
+        System.out.println(href);
+
+    }
+
+    private void processInlineQuery(InlineQuery inlineQuery) {
+
+        System.out.println(inlineQuery.toString());
+
+        MusicService musicService = MusicService.getInstance();
+
+        List<Music> musicList = musicService.search(inlineQuery.getQuery());
+
+        if (musicList.isEmpty())
+            return;
+
+        // ""-> 106 [0-49] :50 [50-99] : 100 [100-106]
+        int start = 0;
+
+        if (!inlineQuery.getOffset().isEmpty()) {
+            start = Integer.parseInt(inlineQuery.getOffset());
+        }
+
+        int end = Math.min(musicList.size(), start + 50);
+
+        List<InlineQueryResult> audioList = new ArrayList<>();
+
+        for (int i = start; i < end; i++) {
+
+            Music music = musicList.get(i);
+
+            InlineQueryResult inlineQueryResultAudio = convertToAudio(i + 1, music);
+
+            audioList.add(inlineQueryResultAudio);
+        }
+
+        AnswerInlineQuery answerInlineQuery = new AnswerInlineQuery(
+                inlineQuery.getId(),
+                audioList
+        );
+
+        if (end != musicList.size()) {
+            answerInlineQuery.setNextOffset(String.valueOf(end));
+        }
+
+        try {
+            execute(answerInlineQuery);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private InlineQueryResult convertToAudio(int number, Music music) {
+        InlineQueryResultAudio inlineQueryResultAudio = new InlineQueryResultAudio();
+        inlineQueryResultAudio.setId(music.getId().toString());
+        inlineQueryResultAudio.setTitle(number + ". " + music.getTitle());
+        inlineQueryResultAudio.setPerformer(music.getArtist());
+        inlineQueryResultAudio.setAudioDuration(music.getDuration());
+        inlineQueryResultAudio.setCaption("Bu yaxshi audio");
+        inlineQueryResultAudio.setAudioUrl("https://t.me/gshggbftbtby/192");
+        return inlineQueryResultAudio;
     }
 
     private void processCallBack(CallbackQuery callbackQuery) {
@@ -79,11 +168,11 @@ public class BotService extends TelegramLongPollingBot {
 
             downloadMusic(callbackQuery);
 
-        } else if (data.startsWith(BotConstants.DELETE_MUSIC)){
+        } else if (data.startsWith(BotConstants.DELETE_MUSIC)) {
 
             deleteMsg(callbackQuery);
 
-        } else if (data.startsWith(BotConstants.FAVORITE_AND_NOT_FAVORITE)){
+        } else if (data.startsWith(BotConstants.FAVORITE_AND_NOT_FAVORITE)) {
 
             favoriteNotFavorite(callbackQuery);
 
@@ -98,13 +187,13 @@ public class BotService extends TelegramLongPollingBot {
         Long chatId = callbackQuery.getMessage().getChatId();
 
         //FAV_OR_NOT_FAVORITE:12 -> 12 -> int
-        int musicId = Integer.parseInt(callbackQuery.getData().replace(BotConstants.FAVORITE_AND_NOT_FAVORITE,""));
+        int musicId = Integer.parseInt(callbackQuery.getData().replace(BotConstants.FAVORITE_AND_NOT_FAVORITE, ""));
 
         Optional<Music> optionalMusic = MusicService.getInstance().getMusicById(musicId);
 
         if (optionalMusic.isEmpty()) {
 
-            sendMsg(chatId,"Musiqa topilmadi");
+            sendMsg(chatId, "Musiqa topilmadi");
 
         } else {
 
@@ -214,12 +303,15 @@ public class BotService extends TelegramLongPollingBot {
 
         String text = message.getText();
 
+        ButtonService buttonService = ButtonService.getInstance();
+
         if (text.equals("/start")) {
 
             Long chatId = message.getChatId();
             String sendText = "Xush kelibsiz";
 
-            sendMsg(chatId, sendText);
+//            sendMsg(chatId, sendText, new ReplyKeyboardRemove(true));
+            sendMsg(chatId, sendText, buttonService.home());
 
         } else if (text.equals("/search")) {
 
@@ -234,8 +326,6 @@ public class BotService extends TelegramLongPollingBot {
             if (musicList.isEmpty()) {
                 sendMsg(message.getChatId(), "Birorta musiqa topilmadi");
             } else {
-
-                ButtonService buttonService = ButtonService.getInstance();
 
                 InlineKeyboardMarkup keyboardMarkup = buttonService.buildInlineBtn(musicList);
 
